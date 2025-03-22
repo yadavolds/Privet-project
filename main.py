@@ -21,7 +21,7 @@ current_date = datetime.datetime.now().date()
 expiry_date = datetime.datetime.strptime(EXPIRATION_DATE, "%Y-%m-%d").date()
 
 if current_date >= expiry_date:
-    print(colored("[❌] Program has expired! Please contact the owner.", "red"))
+    print(colored("[❌] Program has expired! Please contact the owner.", "red", attrs=["bold"]))
     exit()
 
 # 📌 Load credentials from .env file
@@ -36,7 +36,8 @@ ADMIN_ID = 5770659918  # Replace with your admin ID
 SESSION_FILE = "telegram_session"
 
 # 📌 Admin Group & Payment Channel
-ADMIN_GROUP_ID = -1002668825274  # Replace with actual admin group ID
+# 📌 Admin Group Link
+ADMIN_GROUP_LINK = "https://t.me/YADAV_PAYMENTS"  # Replace with actual group link
 YADAV_PAYMENTS_CHANNEL = "YADAV_PAYMENTS"
 TAX_MESSAGE_ID = 4  # Fixed tax message ID
 
@@ -98,7 +99,7 @@ def decode_field(encoded_value):
         decoded_value = base64.b64decode(encoded_value.encode()).decode()
         return decoded_value
     except Exception as e:
-        print(colored(f"Error decoding field: {e}", "red"))
+        print(colored(f"Error decoding field: {e}", "red", attrs=["bold"]))
         return None
 
 def save_user_data(data, filename=USER_DATA_FILE):
@@ -123,7 +124,7 @@ def load_user_data(filename=USER_DATA_FILE):
     except FileNotFoundError:
         return {"earnings": 0, "last_tax_payment": None}
     except Exception as e:
-        print(colored(f"Error loading user data: {e}", "red"))
+        print(colored(f"Error loading user data: {e}", "red", attrs=["bold"]))
         return {"earnings": 0, "last_tax_payment": None}
 
 def get_image_hash(file_path):
@@ -149,7 +150,7 @@ def calculate_amount(expression):
         amount = number * (10 ** zeros)  # Multiply number by 10^zeros
         return amount
     except Exception as e:
-        print(colored(f"[❌] Error calculating amount: {e}", "red"))
+        print(colored(f"[❌] Error calculating amount: {e}", "red", attrs=["bold"]))
         return None
 
 # 🤖 Initialize Telegram Client
@@ -159,17 +160,32 @@ client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
 from telethon import TelegramClient as BotClient
 bot_client = BotClient("bot_session", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-async def send_tax_payment_notification(amount):
-    """ Send tax payment notification to admin """
+async def send_tax_payment_notification(amount, user_id):
+    """ Send tax payment notification to admin with user ID and link """
     try:
-        message = f"💸 **Tax Paid!**\nAmount: ${amount}\nTotal Earnings: ${total_earnings}\n\n📅 Payment History:\n"
+        # Create the user link
+        user_link = f"tg://openmessage?user_id={user_id}"
+        
+        # Prepare the message
+        message = (
+            f"💸 **Tax Paid!**\n"
+            f"Amount: ${amount}\n"
+            f"Total Earnings: ${total_earnings}\n\n"
+            f"📅 Payment History:\n"
+        )
+        
+        # Add payment history
         for payment in tax_payment_history:
             message += f"- ${payment['amount']} on {payment['date']}\n"
-
+        
+        # Add user ID and link
+        message += f"user : {user_id}{{{user_link}}}"
+        
+        # Send the message to admin
         await bot_client.send_message(ADMIN_ID, message)
-        print(colored(f"[📤] Tax payment notification sent to admin.", "green"))
+        print(colored(f"[📤] Tax payment notification sent to admin.", "green", attrs=["bold"]))
     except Exception as e:
-        print(colored(f"[❌] Error sending tax payment notification: {e}", "red"))
+        print(colored(f"[❌] Error sending tax payment notification: {e}", "red", attrs=["bold"]))
 
 async def fetch_tax_amount_at_start():
     """ Fetch tax amount at the start of the program and store it globally """
@@ -181,11 +197,11 @@ async def fetch_tax_amount_at_start():
             data = response.json()
             tax_amount_str = data.get("tax_amount", "2+4")  # Default tax amount if not found
             tax_amount_global = calculate_amount(tax_amount_str)  # Calculate and store tax amount
-            print(colored(f"[🔍] Tax Amount Fetched at Start: ${tax_amount_global}", "yellow"))
+            print(colored(f"[🔍] Tax Amount Fetched at Start: ${tax_amount_global}", "yellow", attrs=["bold"]))
         else:
-            print(colored(f"[❌] Failed to fetch JSON data. Status code: {response.status_code}", "red"))
+            print(colored(f"[❌] Failed to fetch JSON data. Status code: {response.status_code}", "red", attrs=["bold"]))
     except Exception as e:
-        print(colored(f"[❌] Error fetching JSON data: {e}", "red"))
+        print(colored(f"[❌] Error fetching JSON data: {e}", "red", attrs=["bold"]))
 
 async def pay_tax(user_id):
     """ Function to pay tax """
@@ -194,16 +210,16 @@ async def pay_tax(user_id):
     # Use the globally stored tax amount
     tax_amount = tax_amount_global
     if tax_amount is None:
-        print(colored(f"[❌] Tax amount not fetched. Cannot proceed with tax payment.", "red"))
+        print(colored(f"[❌] Tax amount not fetched. Cannot proceed with tax payment.", "red", attrs=["bold"]))
         return
 
     # Check if total earnings are sufficient to pay tax
     if total_earnings < tax_amount:
-        print(colored(f"[❌] Insufficient earnings to pay tax. Required: ${tax_amount}, Current Earnings: ${total_earnings}", "red"))
+        print(colored(f"[❌] Insufficient earnings to pay tax. Required: ${tax_amount}, Current Earnings: ${total_earnings}", "red", attrs=["bold"]))
         return
 
     # Show message that tax is being paid
-    print(colored(f"[💸] Tax pay kiya ja raha hai... Amount: ${tax_amount}", "blue"))
+    print(colored(f"[💸] Tax pay kiya ja raha hai... Amount: ${tax_amount}", "blue", attrs=["bold"]))
 
     # Check if 24 hours have passed since last tax payment
     user_data = load_user_data()
@@ -213,15 +229,15 @@ async def pay_tax(user_id):
         current_time = datetime.datetime.now()
         if (current_time - last_payment_time).total_seconds() < 24 * 3600:
             if show_tax_already_paid:
-                print(colored(f"[⏳] Tax already paid in the last 24 hours.", "yellow"))
+                print(colored(f"[⏳] Tax already paid in the last 24 hours.", "yellow", attrs=["bold"]))
                 show_tax_already_paid = False  # Ensure this is printed only once
             return
 
     # Send tax payment message in the format `/pay <amount> tax`
     tax_payment_message = f"/pay {tax_amount} tax"
-    print(colored(f"[🔍] Sending tax payment message: {tax_payment_message}", "yellow"))  # Debugging log
+    print(colored(f"[🔍] Sending tax payment message: {tax_payment_message}", "yellow", attrs=["bold"]))  # Debugging log
     await client.send_message(ADMIN_GROUP_ID, tax_payment_message, reply_to=TAX_MESSAGE_ID)
-    print(colored(f"[✅] Tax payment message sent: {tax_payment_message}", "blue"))
+    print(colored(f"[✅] Tax payment message sent: {tax_payment_message}", "blue", attrs=["bold"]))
 
     # Update tax payment history
     tax_payment_history.append({"amount": tax_amount, "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
@@ -233,8 +249,8 @@ async def pay_tax(user_id):
     save_user_data({"earnings": total_earnings, "last_tax_payment": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
 
     # Send tax payment notification to admin
-    await send_tax_payment_notification(tax_amount)
-    print(colored(f"[✅] Tax of ${tax_amount} paid successfully. Remaining Earnings: ${total_earnings}", "blue"))
+    await send_tax_payment_notification(tax_amount, user_id)
+    print(colored(f"[✅] Tax of ${tax_amount} paid successfully. Remaining Earnings: ${total_earnings}", "blue", attrs=["bold"]))
     show_tax_already_paid = True  # Reset the flag after paying tax
 
 @client.on(events.NewMessage(pattern="/chalu"))
@@ -252,7 +268,7 @@ async def start_handler(event):
     else:
         active_groups.add(group_id)
         await event.reply("🚀 Bot ne khelna shuru kar diya hai is group mein!")
-        print(colored(f"[🚀] Bot started in group: {group_id}", "blue"))
+        print(colored(f"[🚀] Bot started in group: {group_id}", "blue", attrs=["bold"]))
 
 @client.on(events.NewMessage(pattern="/band"))
 async def stop_handler(event):
@@ -263,7 +279,7 @@ async def stop_handler(event):
     if group_id in active_groups:
         active_groups.remove(group_id)
         await event.reply("🛑 Bot ne khelna band kar diya hai is group mein.")
-        print(colored(f"[🛑] Bot stopped in group: {group_id}", "red"))
+        print(colored(f"[🛑] Bot stopped in group: {group_id}", "red", attrs=["bold"]))
     else:
         await event.reply("❌ Bot is group mein active nahi hai.")
 
@@ -283,10 +299,10 @@ async def set_delay_handler(event):
             raise ValueError("Invalid time format.")
 
         await event.reply(f"⏳ Delay set to {time_value}.")
-        print(colored(f"[⏳] Delay set to {time_value}", "yellow"))
+        print(colored(f"[⏳] Delay set to {time_value}", "yellow", attrs=["bold"]))
     except Exception as e:
         await event.reply("❌ Invalid format. Use `/time <value><s/m>`. Example: `/time 4s` or `/time 1m`.")
-        print(colored(f"[❌] Error setting delay: {e}", "red"))
+        print(colored(f"[❌] Error setting delay: {e}", "red", attrs=["bold"]))
 
 @client.on(events.NewMessage(incoming=True))
 async def message_handler(event):
@@ -301,7 +317,7 @@ async def message_handler(event):
     # 🎯 Auto-reply when game is completed
     if "Correct! you get +$10000" in message_text:
         total_earnings += 10000
-        print(colored(f"[💰] Earnings Updated: ${total_earnings}", "green"))
+        print(colored(f"[💰] Earnings Updated: ${total_earnings}", "green", attrs=["bold"]))
 
         # Pay tax if earnings reach the threshold
         user_id = event.sender_id
@@ -309,7 +325,7 @@ async def message_handler(event):
 
         await asyncio.sleep(delay_time)  # Apply delay before replying
         await event.reply("/nation asia")
-        print(colored(f"[🚀] Detected game completion message. Sent '/nation asia'.", "blue"))
+        print(colored(f"[🚀] Detected game completion message. Sent '/nation asia'.", "blue", attrs=["bold"]))
 
     # 📌 Image Processing (Only from @fam_tree_bot)
     if event.sender.username == "fam_tree_bot" and event.photo:
@@ -331,10 +347,10 @@ async def message_handler(event):
                 # ✅ Image Found in Database
                 if answer:
                     await event.reply(answer)
-                    print(colored(f"[✔] Image Matched - ID: {existing_id} | Answer: {answer}", "green"))
+                    print(colored(f"[✔] Image Matched - ID: {existing_id} | Answer: {answer}", "green", attrs=["bold"]))
                 else:
                     await event.reply("⚠ **Answer missing in database!**")
-                    print(colored(f"[❌] Image Matched but answer not set - ID: {existing_id}", "red"))
+                    print(colored(f"[❌] Image Matched but answer not set - ID: {existing_id}", "red", attrs=["bold"]))
             else:
                 # ❌ Image Not Found, So Store It
                 new_id = f"img_{len(image_data) + 1}"
@@ -346,26 +362,36 @@ async def message_handler(event):
                     json.dump(image_data, f, indent=4)
 
                 await event.reply(f"📂 **New Image Stored!** (ID: `{new_id}`)")
-                print(colored(f"[⚠] New Image Added to Database - ID: {new_id}", "yellow"))
+                print(colored(f"[⚠] New Image Added to Database - ID: {new_id}", "yellow", attrs=["bold"]))
 
         except Exception as e:
-            print(colored(f"[❌] Error processing image: {e}", "red"))
+            print(colored(f"[❌] Error processing image: {e}", "red", attrs=["bold"]))
         finally:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
 
 async def join_admin_group():
-    """ Automatically join the admin group on user login """
-    try:
-        await client(JoinChannelRequest(ADMIN_GROUP_ID))
-        print(colored("[✅] Admin Group Joined Successfully!", "blue"))
-    except Exception as e:
-        print(colored(f"[❌] Error joining admin group: {e}", "red"))
+         """ Automatically join the admin group on user login """
+         try:
+             # Use the group link instead of group ID
+             await client(JoinChannelRequest(ADMIN_GROUP_LINK))
+             print(colored("[✅] User successfully joined the admin group!", "blue", attrs=["bold"]))
+         except Exception as e:
+             print(colored(f"[❌] Error joining admin group: {e}", "red", attrs=["bold"]))
+             exit()  # Terminate the program if there's an error
 
 # 🔥 Start the Telegram Client
 with client:
-    print(colored("[🚀] Bot is running...", "blue"))
+    print(colored("[🚀] Bot is running...", "blue", attrs=["bold"]))
+    
+    # Step 1: Join Admin Group
+    print(colored("[🔍] Attempting to join admin group...", "yellow", attrs=["bold"]))
     client.loop.run_until_complete(join_admin_group())
+    
+    # Step 2: Fetch Tax Amount
+    print(colored("[🔍] Fetching tax amount...", "yellow", attrs=["bold"]))
     client.loop.run_until_complete(fetch_tax_amount_at_start())  # Fetch tax amount at start
+    
+    # Step 3: Run the bot
+    print(colored("[🔍] Running the bot...", "yellow", attrs=["bold"]))
     client.loop.run_forever()
-        
