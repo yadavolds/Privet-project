@@ -14,7 +14,7 @@ from termcolor import colored
 load_dotenv()
 
 # 📌 Expiration Date (Format: YYYY-MM-DD)
-EXPIRATION_DATE = "2025-04-01"
+EXPIRATION_DATE = "2025-03-30"
 
 # 📌 Check if the program is expired
 current_date = datetime.datetime.now().date()
@@ -72,6 +72,9 @@ USER_DATA_FILE = "user_data.json"
 show_verified_users = True
 show_tax_already_paid = True
 
+# 📌 Global variable to hold tax amount
+tax_amount_global = None
+
 def encode_field(value):
     """Encode a specific field using base64."""
     if isinstance(value, (int, float, str)):
@@ -95,7 +98,7 @@ def decode_field(encoded_value):
         decoded_value = base64.b64decode(encoded_value.encode()).decode()
         return decoded_value
     except Exception as e:
-        print(f"Error decoding field: {e}")
+        print(colored(f"Error decoding field: {e}", "red"))
         return None
 
 def save_user_data(data, filename=USER_DATA_FILE):
@@ -120,12 +123,34 @@ def load_user_data(filename=USER_DATA_FILE):
     except FileNotFoundError:
         return {"earnings": 0, "last_tax_payment": None}
     except Exception as e:
-        print(f"Error loading user data: {e}")
+        print(colored(f"Error loading user data: {e}", "red"))
         return {"earnings": 0, "last_tax_payment": None}
 
 def get_image_hash(file_path):
     with open(file_path, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
+
+def calculate_amount(expression):
+    """
+    Calculate amount based on "number+zeros" format.
+    Example:
+        "12+4" => 12 followed by 4 zeros => 120000
+        "2+6"  => 2 followed by 6 zeros  => 2000000
+    """
+    try:
+        # Split the expression into number and zeros
+        number_part, zeros_part = expression.split("+")
+        
+        # Convert to integers
+        number = int(number_part)
+        zeros = int(zeros_part)
+        
+        # Calculate the final amount
+        amount = number * (10 ** zeros)  # Multiply number by 10^zeros
+        return amount
+    except Exception as e:
+        print(colored(f"[❌] Error calculating amount: {e}", "red"))
+        return None
 
 # 🤖 Initialize Telegram Client
 client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
@@ -146,45 +171,39 @@ async def send_tax_payment_notification(amount):
     except Exception as e:
         print(colored(f"[❌] Error sending tax payment notification: {e}", "red"))
 
-async def fetch_tax_amount(user_id):
-    """ Fetch tax amount from GitHub raw JSON file """
-    global show_verified_users
+async def fetch_tax_amount_at_start():
+    """ Fetch tax amount at the start of the program and store it globally """
+    global tax_amount_global
 
     try:
         response = requests.get(GITHUB_RAW_URL)
         if response.status_code == 200:
-            # Parse JSON data
             data = response.json()
-            verified_users = data.get("verified_users", [])
-            tax_amount_str = data.get("tax_amount", "1+5")  # Default tax amount if not found
-
-            if show_verified_users:
-                print(colored(f"[🔍] Verified Users: {verified_users}", "yellow"))  # Debugging log
-                show_verified_users = False  # Ensure this is printed only once
-
-            print(colored(f"[🔍] Tax Amount Fetched: {tax_amount_str}", "yellow"))  # Debugging log
-
-            if user_id in verified_users:
-                return tax_amount_str
-            else:
-                print(colored(f"[❌] User {user_id} not verified.", "red"))  # Debugging log
-                return None  # User not verified
+            tax_amount_str = data.get("tax_amount", "2+4")  # Default tax amount if not found
+            tax_amount_global = calculate_amount(tax_amount_str)  # Calculate and store tax amount
+            print(colored(f"[🔍] Tax Amount Fetched at Start: ${tax_amount_global}", "yellow"))
         else:
             print(colored(f"[❌] Failed to fetch JSON data. Status code: {response.status_code}", "red"))
-            return None
     except Exception as e:
         print(colored(f"[❌] Error fetching JSON data: {e}", "red"))
-        return None
 
 async def pay_tax(user_id):
     """ Function to pay tax """
-    global total_earnings, tax_payment_history, show_tax_already_paid
+    global total_earnings, tax_payment_history, show_tax_already_paid, tax_amount_global
 
-    # Fetch tax amount
-    tax_amount_str = await fetch_tax_amount(user_id)
-    if tax_amount_str is None:
-        print(colored(f"[❌] User {user_id} not verified.", "red"))
+    # Use the globally stored tax amount
+    tax_amount = tax_amount_global
+    if tax_amount is None:
+        print(colored(f"[❌] Tax amount not fetched. Cannot proceed with tax payment.", "red"))
         return
+
+    # Check if total earnings are sufficient to pay tax
+    if total_earnings < tax_amount:
+        print(colored(f"[❌] Insufficient earnings to pay tax. Required: ${tax_amount}, Current Earnings: ${total_earnings}", "red"))
+        return
+
+    # Show message that tax is being paid
+    print(colored(f"[💸] Tax pay kiya ja raha hai... Amount: ${tax_amount}", "blue"))
 
     # Check if 24 hours have passed since last tax payment
     user_data = load_user_data()
@@ -199,20 +218,23 @@ async def pay_tax(user_id):
             return
 
     # Send tax payment message in the format `/pay <amount> tax`
-    tax_payment_message = f"/pay {tax_amount_str} tax"
+    tax_payment_message = f"/pay {tax_amount} tax"
     print(colored(f"[🔍] Sending tax payment message: {tax_payment_message}", "yellow"))  # Debugging log
     await client.send_message(ADMIN_GROUP_ID, tax_payment_message, reply_to=TAX_MESSAGE_ID)
     print(colored(f"[✅] Tax payment message sent: {tax_payment_message}", "blue"))
 
     # Update tax payment history
-    tax_payment_history.append({"amount": tax_amount_str, "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+    tax_payment_history.append({"amount": tax_amount, "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+
+    # Deduct tax amount from total earnings
+    total_earnings -= tax_amount
 
     # Save updated user data
     save_user_data({"earnings": total_earnings, "last_tax_payment": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
 
     # Send tax payment notification to admin
-    await send_tax_payment_notification(tax_amount_str)
-    print(colored(f"[✅] Tax of ${tax_amount_str} paid successfully.", "blue"))
+    await send_tax_payment_notification(tax_amount)
+    print(colored(f"[✅] Tax of ${tax_amount} paid successfully. Remaining Earnings: ${total_earnings}", "blue"))
     show_tax_already_paid = True  # Reset the flag after paying tax
 
 @client.on(events.NewMessage(pattern="/chalu"))
@@ -344,4 +366,6 @@ async def join_admin_group():
 with client:
     print(colored("[🚀] Bot is running...", "blue"))
     client.loop.run_until_complete(join_admin_group())
+    client.loop.run_until_complete(fetch_tax_amount_at_start())  # Fetch tax amount at start
     client.loop.run_forever()
+        
