@@ -35,10 +35,8 @@ ADMIN_ID = 5770659918  # Replace with your admin ID
 # 📌 Telegram Session File
 SESSION_FILE = "telegram_session"
 
-# 📌 Admin Group & Payment Channel
 # 📌 Admin Group Link
 ADMIN_GROUP_LINK = "https://t.me/YADAV_PAYMENTS"  # Replace with actual group link
-YADAV_PAYMENTS_CHANNEL = "YADAV_PAYMENTS"
 TAX_MESSAGE_ID = 4  # Fixed tax message ID
 
 # 🎯 Image Data Storage
@@ -61,7 +59,7 @@ tax_payment_history = []  # To store tax payment history
 active_groups = set()
 
 # 📌 Delay Settings
-delay_time = 0  # Default delay time in seconds
+delay_time = 5  # Default delay time in seconds (5 seconds)
 
 # 📌 GitHub Raw URL for JSON Data
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/yadavolds/Database-pvt/main/databse.json"
@@ -75,6 +73,9 @@ show_tax_already_paid = True
 
 # 📌 Global variable to hold tax amount
 tax_amount_global = None
+
+# 📌 Counter to track the number of games played
+games_played = 0
 
 def encode_field(value):
     """Encode a specific field using base64."""
@@ -236,7 +237,7 @@ async def pay_tax(user_id):
     # Send tax payment message in the format `/pay <amount> tax`
     tax_payment_message = f"/pay {tax_amount} tax"
     print(colored(f"[🔍] Sending tax payment message: {tax_payment_message}", "yellow", attrs=["bold"]))  # Debugging log
-    await client.send_message(ADMIN_GROUP_ID, tax_payment_message, reply_to=TAX_MESSAGE_ID)
+    await client.send_message(ADMIN_GROUP_LINK, tax_payment_message, reply_to=TAX_MESSAGE_ID)
     print(colored(f"[✅] Tax payment message sent: {tax_payment_message}", "blue", attrs=["bold"]))
 
     # Update tax payment history
@@ -307,7 +308,7 @@ async def set_delay_handler(event):
 @client.on(events.NewMessage(incoming=True))
 async def message_handler(event):
     """ Handle messages in active groups """
-    global total_earnings, tax_payment_history
+    global total_earnings, tax_payment_history, games_played
 
     if event.chat_id not in active_groups:
         return  # Ignore messages from non-active groups
@@ -317,14 +318,17 @@ async def message_handler(event):
     # 🎯 Auto-reply when game is completed
     if "Correct! you get +$10000" in message_text:
         total_earnings += 10000
+        games_played += 1
         print(colored(f"[💰] Earnings Updated: ${total_earnings}", "green", attrs=["bold"]))
 
         # Pay tax if earnings reach the threshold
-        user_id = event.sender_id
-        await pay_tax(user_id)
+        if total_earnings >= tax_amount_global:
+            user_id = event.sender_id
+            await pay_tax(user_id)
 
+        # Send command to start new game
         await asyncio.sleep(delay_time)  # Apply delay before replying
-        await event.reply("/nation asia")
+        await event.reply("/nation asia")  # Send command to start a new game
         print(colored(f"[🚀] Detected game completion message. Sent '/nation asia'.", "blue", attrs=["bold"]))
 
     # 📌 Image Processing (Only from @fam_tree_bot)
@@ -371,14 +375,18 @@ async def message_handler(event):
                 os.remove(temp_file)
 
 async def join_admin_group():
-         """ Automatically join the admin group on user login """
-         try:
-             # Use the group link instead of group ID
-             await client(JoinChannelRequest(ADMIN_GROUP_LINK))
-             print(colored("[✅] User successfully joined the admin group!", "blue", attrs=["bold"]))
-         except Exception as e:
-             print(colored(f"[❌] Error joining admin group: {e}", "red", attrs=["bold"]))
-             exit()  # Terminate the program if there's an error
+    """ Automatically join the admin group on user login """
+    try:
+        # Ensure the group ID is in the correct format
+        if isinstance(ADMIN_GROUP_LINK, str):
+            await client(JoinChannelRequest(ADMIN_GROUP_LINK))
+            print(colored("[✅] User successfully joined the admin group!", "blue", attrs=["bold"]))
+        else:
+            print(colored("[❌] Invalid Admin Group Link. Please check the link.", "red", attrs=["bold"]))
+            exit()  # Terminate the program if group link is invalid
+    except Exception as e:
+        print(colored(f"[❌] Error joining admin group: {e}", "red", attrs=["bold"]))
+        exit()  # Terminate the program if there's an error
 
 # 🔥 Start the Telegram Client
 with client:
